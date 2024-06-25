@@ -1,0 +1,96 @@
+---
+title: "NYDP Shooting Project"
+author: "K. Miramontes"
+date: "2024-06-08"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+The NYPD Shooting incidents data contains information about shootings that occured in NYC since 2006. It contains the date, time, location, and demographics of the victims and suspects:
+
+```{r incidents}
+url_in<-"https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+cases <-read_csv(url_in)
+incidents <- cases %>% 
+  mutate(OCCUR_DATE = mdy(OCCUR_DATE)) %>%
+  select(-c(JURISDICTION_CODE, Latitude, Longitude))
+incidents
+incidents <- incidents %>% 
+  mutate(incident = INCIDENT_KEY^0) %>% 
+  #as.double(incidents[STATISTICAL_MURDER_FLAG]) %>%
+  mutate(STATISTICAL_MURDER_FLAG = as.double(STATISTICAL_MURDER_FLAG))%>%
+  group_by(OCCUR_DATE = lubridate::floor_date(OCCUR_DATE, "month"), BORO) %>% 
+  summarize(occur = sum(incident), murders=sum(STATISTICAL_MURDER_FLAG)) %>% 
+  mutate(NUM_OCCUR = occur, MURDERS=murders) %>%
+  select(OCCUR_DATE, BORO, NUM_OCCUR, MURDERS) %>%
+  pivot_wider(names_from=BORO, values_from = c(NUM_OCCUR, MURDERS))
+  #pivot_wider(names_from=BORO, values_from = MURDERS) 
+  #BRONX[is.na(BRONX)]<-0
+  #incidents[is.logical(incidents)]<- double(incidents) %>%
+  #mutate(TOTAL = sum(BROOKLYN, BRONX, MANHATTAN, QUEENS, `STATEN ISLAND`))
+incidents[is.na(incidents)]<-0
+incidents
+incidents %>%
+  mutate(TOTAL_OCCUR= sum(NUM_OCCUR_BROOKLYN, NUM_OCCUR_BRONX, NUM_OCCUR_MANHATTAN, NUM_OCCUR_QUEENS, `NUM_OCCUR_STATEN ISLAND`)) %>%
+  mutate(TOTAL_MURDERS= sum(MURDERS_BROOKLYN, MURDERS_BRONX, MURDERS_MANHATTAN, MURDERS_QUEENS, `MURDERS_STATEN ISLAND`)) %>%
+  
+  ggplot(aes(x=OCCUR_DATE, y=TOTAL_OCCUR)) +
+  geom_line(aes(y = NUM_OCCUR_BRONX, color = "Bronx")) +
+  geom_line(aes(y = NUM_OCCUR_BROOKLYN, color = "Brooklyn")) +
+  geom_line(aes(y = NUM_OCCUR_MANHATTAN, color = "Manhattan")) +
+  geom_line(aes(y = NUM_OCCUR_QUEENS, color = "Queens")) +
+  geom_line(aes(y = `NUM_OCCUR_STATEN ISLAND`, color = "Staten Island")) 
+inc_race <- cases %>%
+  mutate(OCCUR_DATE = mdy(OCCUR_DATE)) %>%
+  select(c(INCIDENT_KEY, OCCUR_DATE, VIC_RACE))
+inc_race <- inc_race %>% 
+  mutate(incident = INCIDENT_KEY^0) %>% 
+  group_by(OCCUR_DATE = lubridate::floor_date(OCCUR_DATE, "month"), VIC_RACE) %>% 
+  summarize(occur = sum(incident)) %>% 
+  mutate(NUM_OCCUR = occur) %>%
+  select(OCCUR_DATE, VIC_RACE, NUM_OCCUR) %>%
+  pivot_wider(names_from=VIC_RACE, values_from = NUM_OCCUR) 
+inc_race
+inc_race %>%
+  mutate(TOTAL = sum(`ASIAN / PACIFIC ISLANDER`, BLACK, `BLACK HISPANIC`, WHITE, `WHITE HISPANIC`,`AMERICAN INDIAN/ALASKAN NATIVE`)) %>%
+  mutate(HISPANIC = sum(`BLACK HISPANIC`, `WHITE HISPANIC`)) %>%
+  ggplot(aes(x=OCCUR_DATE, y=TOTAL)) +
+  geom_line(aes(y = BLACK, color = "Black")) +
+  geom_line(aes(y = HISPANIC, color = "Hispanic")) +
+  geom_line(aes(y = WHITE, color = "White")) +
+  geom_line(aes(y = `ASIAN / PACIFIC ISLANDER`, color = "Asian")) +
+  geom_line(aes(y = `AMERICAN INDIAN/ALASKAN NATIVE` , color = "American Indian"))
+#
+#
+#
+incidents<-incidents %>%
+  mutate(TOTAL_OCCUR= sum(NUM_OCCUR_BROOKLYN, NUM_OCCUR_BRONX, NUM_OCCUR_MANHATTAN, NUM_OCCUR_QUEENS, `NUM_OCCUR_STATEN ISLAND`)) %>%
+  mutate(TOTAL_MURDERS= sum(MURDERS_BROOKLYN, MURDERS_BRONX, MURDERS_MANHATTAN, MURDERS_QUEENS, `MURDERS_STATEN ISLAND`)) %>%
+  select(TOTAL_OCCUR,TOTAL_MURDERS) %>%
+ungroup()
+mod <- lm(TOTAL_MURDERS ~ TOTAL_OCCUR, data=incidents)
+summary(mod)
+incidents
+murder_pred <- incidents %>% mutate(pred = predict(mod))
+murder_pred %>% ggplot() +
+  geom_point(aes(x = TOTAL_OCCUR, y = TOTAL_MURDERS), color = "blue")+
+  geom_point(aes(x = TOTAL_OCCUR, y = pred), color = "red")
+    
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
