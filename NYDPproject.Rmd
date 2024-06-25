@@ -1,7 +1,7 @@
 ---
-title: "NYDP Shooting Project"
-author: "K. Miramontes"
-date: "2024-06-08"
+title: "NYPD Shooting Incidents Project"
+author: "Karla Miramontes"
+date: "2024-06-24"
 output:
   pdf_document: default
   html_document: default
@@ -11,32 +11,48 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
 
-The NYPD Shooting incidents data contains information about shootings that occured in NYC since 2006. It contains the date, time, location, and demographics of the victims and suspects:
+The NYPD Shooting incidents data contains information about shootings that occured in NYC since 2006. It contains the date, time, location, and demographics of the victims and suspects. My goal is to analyze it to draw conclusions about these types of incidents over time that can be beneficial in the future.
 
-```{r incidents}
+## Tidying and Transforming Data
+
+First I started by reading the data from the csv file and assigning it to the variable `cases`.
+
+```{r cases, message=FALSE}
+library(tidyverse)
+
 url_in<-"https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
 cases <-read_csv(url_in)
+cases
+```
+
+I cleaned the data and reorganized the columns to work for my analysis.
+
+I started by putting the dates in date format and getting rid of columns I wouldn't use like latitude, longitude and the jurisdiction code of the incidents.
+
+```{r incidents}
 incidents <- cases %>% 
   mutate(OCCUR_DATE = mdy(OCCUR_DATE)) %>%
   select(-c(JURISDICTION_CODE, Latitude, Longitude))
 incidents
+```
+## Incidents By Borough Visualization
+
+I added a column for the number of shooting incidents and another for the ones that were murder cases. I had to change the column that stated whether an incident was murder (TRUE) or not (FALSE) into 1s for TRUE and 0s for FALSE to be able to count the number of murders that occurred in a day. 
+I grouped the data by month to better visualize it on a graph, and by the 5 boroughs of New York. I created two columns for each of the boroughs with the number of incidents and the number of which were murders.
+```{r murders, message=FALSE}
 incidents <- incidents %>% 
   mutate(incident = INCIDENT_KEY^0) %>% 
-  #as.double(incidents[STATISTICAL_MURDER_FLAG]) %>%
   mutate(STATISTICAL_MURDER_FLAG = as.double(STATISTICAL_MURDER_FLAG))%>%
   group_by(OCCUR_DATE = lubridate::floor_date(OCCUR_DATE, "month"), BORO) %>% 
   summarize(occur = sum(incident), murders=sum(STATISTICAL_MURDER_FLAG)) %>% 
   mutate(NUM_OCCUR = occur, MURDERS=murders) %>%
   select(OCCUR_DATE, BORO, NUM_OCCUR, MURDERS) %>%
   pivot_wider(names_from=BORO, values_from = c(NUM_OCCUR, MURDERS))
-  #pivot_wider(names_from=BORO, values_from = MURDERS) 
-  #BRONX[is.na(BRONX)]<-0
-  #incidents[is.logical(incidents)]<- double(incidents) %>%
-  #mutate(TOTAL = sum(BROOKLYN, BRONX, MANHATTAN, QUEENS, `STATEN ISLAND`))
 incidents[is.na(incidents)]<-0
-incidents
+```
+I graphed the number of incidents per month for each of the boroughs in New York and differentiated each by color. 
+```{r BORO}
 incidents %>%
   mutate(TOTAL_OCCUR= sum(NUM_OCCUR_BROOKLYN, NUM_OCCUR_BRONX, NUM_OCCUR_MANHATTAN, NUM_OCCUR_QUEENS, `NUM_OCCUR_STATEN ISLAND`)) %>%
   mutate(TOTAL_MURDERS= sum(MURDERS_BROOKLYN, MURDERS_BRONX, MURDERS_MANHATTAN, MURDERS_QUEENS, `MURDERS_STATEN ISLAND`)) %>%
@@ -46,7 +62,17 @@ incidents %>%
   geom_line(aes(y = NUM_OCCUR_BROOKLYN, color = "Brooklyn")) +
   geom_line(aes(y = NUM_OCCUR_MANHATTAN, color = "Manhattan")) +
   geom_line(aes(y = NUM_OCCUR_QUEENS, color = "Queens")) +
-  geom_line(aes(y = `NUM_OCCUR_STATEN ISLAND`, color = "Staten Island")) 
+  geom_line(aes(y = `NUM_OCCUR_STATEN ISLAND`, color = "Staten Island")) + 
+  labs(title = "Shooting Incidents in NY Boroughs", y = "Number of Incidents", x= "Date (month)")
+```
+The graph shows that Brooklyn typically has more incidents per month compared to the other boroughs, and Staten Island has the least. However, they all seem to follow the same pattern over the years. The number of incidents were less the years before 2020 and all boroughs had a large spike during one of the months in 2020. I know from background knowledge that during that time there was a lot of protests in major cities due to the Black Lives Matter movement and I believe that could have contributed to the large spike during that time.
+
+## Race/Ethnicity of Incident Victims Visualization
+
+After that visualization I wanted to compare the race/ethnicity of the victims of these incidents over time.
+
+I transformed the data the same as before but instead of creating columns for the differnt boroughs I created columns for the different race groups.
+```{r race/ethnicity, message=FALSE}
 inc_race <- cases %>%
   mutate(OCCUR_DATE = mdy(OCCUR_DATE)) %>%
   select(c(INCIDENT_KEY, OCCUR_DATE, VIC_RACE))
@@ -58,6 +84,9 @@ inc_race <- inc_race %>%
   select(OCCUR_DATE, VIC_RACE, NUM_OCCUR) %>%
   pivot_wider(names_from=VIC_RACE, values_from = NUM_OCCUR) 
 inc_race
+```
+I noticed that there were two races "White Hispanics" and "Black Hispanics" for an ethnic group that is typically categorized as just "Hispanic" so I decided to group the two into one and call it "Hispanic".
+```{r race/ethnicity graph, message=FALSE}
 inc_race %>%
   mutate(TOTAL = sum(`ASIAN / PACIFIC ISLANDER`, BLACK, `BLACK HISPANIC`, WHITE, `WHITE HISPANIC`,`AMERICAN INDIAN/ALASKAN NATIVE`)) %>%
   mutate(HISPANIC = sum(`BLACK HISPANIC`, `WHITE HISPANIC`)) %>%
@@ -66,10 +95,17 @@ inc_race %>%
   geom_line(aes(y = HISPANIC, color = "Hispanic")) +
   geom_line(aes(y = WHITE, color = "White")) +
   geom_line(aes(y = `ASIAN / PACIFIC ISLANDER`, color = "Asian")) +
-  geom_line(aes(y = `AMERICAN INDIAN/ALASKAN NATIVE` , color = "American Indian"))
-#
-#
-#
+  geom_line(aes(y = `AMERICAN INDIAN/ALASKAN NATIVE` , color = "American Indian")) +
+  labs(title= "Race/Ethnicity of Shooting Incident Victims", y="Number of Shooting Incident Victims", x="Date (month)")
+```
+The graph shows that majority of the victims of shooting incidents in New York are Black and then Hispanic. This graph also has a large spike in 2020 and the spike is the largest for the number of black victims during that time. The protests and riots that were going on in major cities during this time could have contributed to this spike.
+
+## Murder Incidents Model
+
+I thought it would be interesting to see a model for the number of murder cases from the number number of incidents and see if there was a strong correlation.
+
+I added the number of incidents and murders from each borough to have a total number of incidents and murders. Using that data I created a model to predict the total number of murders in a month based on the number of incidents in that month. 
+```{r model, message=FALSE}
 incidents<-incidents %>%
   mutate(TOTAL_OCCUR= sum(NUM_OCCUR_BROOKLYN, NUM_OCCUR_BRONX, NUM_OCCUR_MANHATTAN, NUM_OCCUR_QUEENS, `NUM_OCCUR_STATEN ISLAND`)) %>%
   mutate(TOTAL_MURDERS= sum(MURDERS_BROOKLYN, MURDERS_BRONX, MURDERS_MANHATTAN, MURDERS_QUEENS, `MURDERS_STATEN ISLAND`)) %>%
@@ -77,20 +113,25 @@ incidents<-incidents %>%
 ungroup()
 mod <- lm(TOTAL_MURDERS ~ TOTAL_OCCUR, data=incidents)
 summary(mod)
-incidents
+```
+The model is the linear function `Total Murders = .180785(Total Incidents) + 1.667875` and it has an r-squared of .7178 meaning the r correlation coefficient is .847231. That indicates a very strong association between the number of incidents and number of murders. 
+Due to this strong association I graphed the predicted values from the model in red and the actual values in blue.
+```{r predictions}
 murder_pred <- incidents %>% mutate(pred = predict(mod))
 murder_pred %>% ggplot() +
   geom_point(aes(x = TOTAL_OCCUR, y = TOTAL_MURDERS), color = "blue")+
-  geom_point(aes(x = TOTAL_OCCUR, y = pred), color = "red")
+  geom_point(aes(x = TOTAL_OCCUR, y = pred), color = "red") +
+  geom_line(aes(x = TOTAL_OCCUR, y = pred), color = "red")+
+  labs(title="Predicted vs Actual Values", x= "Number of Shooting Incidents", y="Number of Murders")
     
 ```
+In the graph it can be seen that the data does follow a linear pattern and the model predictions fall in the middle of the data with the about the same number of actual points above and below. It shows that as the total number of incidents gets larger the the more spread out the points become from each other and the linear model. 
 
-## Including Plots
+## Conclusion and Bias
 
-You can also embed plots, for example:
+The analysis of this data showed that the areas in New York with the most shooting incidents are Brooklyn and the Bronx while the area with the least is Staten Island. It also showed that the race/ethnicity of most shooting incident victims are black and hispanic. Regardless of which area has the most incidents or which ethnicity/race has the most incident victims the patterns are very similar among all groups. The change in number of incidents over time is similar but at different scales for each group. The number of shooting incidents was the lowest the 3 years before 2020. In 2020 there was a large spike around the time when there were a lot of Black Lives Matter protests and riots in large cities. This was supported by the visualizaion because the spike in number of shooting incident victims that were black was at a much larger scale compared to the other race/ethnicity groups. \
+The association between the number of shooting incidents and those of which resulted in murder is linear and very strong. The prediction model could be beneficial in forecasting the number of murders from the number of shooting incidents. \
+This data could have been impacted by bias when being collected and when being analyzed. The data collected was collected from different incidents in which different personal was present and could have had different methods of collecting the data. The data was also collected since 2006 meaning the technology and methods of collecting data have changed a lot. These are things that could have introduced bias into the analysis. Personal bias from the analyst can also have an impact. For this specific project my personal opinions regarding political beliefs as well as background knowledge on New York's demographics could have introduced bias into the analysis. I mitigated this bias by not making any assumptions about the data before I analyzed it  or by drawing any conclusions that weren't clearly shown in the analysis. I stated factual information that related  without stating my personal opinions on the topics.
 
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
