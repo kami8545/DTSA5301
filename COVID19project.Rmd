@@ -1,0 +1,83 @@
+---
+title: "COVID19"
+author: "K. Miramontes"
+date: "2024-06-23"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+url_in <-"https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/"
+file_names<-
+  c("time_series_covid19_confirmed_global.csv",
+    "time_series_covid19_deaths_global.csv",
+    "time_series_covid19_confirmed_US.csv",
+    "time_series_covid19_deaths_US.csv")
+urls <- str_c(url_in, file_names)
+urls
+global_cases<-read_csv(urls[1])
+global_deaths<-read_csv(urls[2])
+US_cases<-read_csv(urls[3])
+US_deaths <-read_csv(urls[4])
+global_cases <- global_cases %>%
+  pivot_longer(cols = -c(`Province/State`, `Country/Region`, Lat, Long), names_to = "date", values_to = "cases") %>%
+  select(-c(Lat, Long))
+global_deaths <- global_deaths %>%
+  pivot_longer(cols = -c(`Province/State`, `Country/Region`, Lat, Long), names_to = "date", values_to = "deaths") %>%
+  select(-c(Lat, Long))
+global <- global_cases %>% 
+  full_join(global_deaths) %>%
+  rename(Country_Region = `Country/Region`,
+         Province_State = `Province/State`) %>%
+  mutate(date=mdy(date))
+US_cases <- US_cases %>% 
+  pivot_longer(cols = -(UID:Combined_Key),
+               names_to = "date",
+               values_to = "cases") %>%
+  select(Admin2:cases) %>%
+  mutate(date = mdy(date)) %>%
+  select(-c(Lat, Long_))
+
+US_by_date <- US_cases %>% 
+  group_by(date) %>%
+  summarize(cases = sum(cases)) %>%
+  select(date, cases) %>%
+  ungroup()
+Global_by_date <- global %>%
+  group_by(date) %>%
+  summarize(cases = sum(cases), deaths = sum(deaths)) %>%
+  select(date, cases, deaths)
+ggplot()+
+  geom_line(aes(x=US_by_date$date, y=US_by_date$cases, color="US Cases")) +
+  geom_line(aes(x=Global_by_date$date, y=Global_by_date$cases, color = "Global Cases"))
+Global_by_date %>%
+  ggplot()+
+  geom_line(aes(x=date, y=(cases-deaths)/cases)) 
+mod <- lm(Global_by_date$cases ~ US_by_date$cases, data = c(Global_by_date, US_by_date))
+Global_pred <- Global_by_date %>% mutate(pred = predict(mod))
+ggplot()+
+  geom_point(aes(x= US_by_date$cases, y=Global_by_date$cases), color = "blue") +
+  geom_point(aes(x=US_by_date$cases, y = Global_pred$pred), color= "red")
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
