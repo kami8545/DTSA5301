@@ -1,6 +1,6 @@
 ---
-title: "COVID19"
-author: "K. Miramontes"
+title: "COVID-19 US and Global Project"
+author: "Karla Miramontes"
 date: "2024-06-23"
 output:
   pdf_document: default
@@ -11,13 +11,13 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+## Tidying and Transforming Data
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+The COVID-19 data sets contain information abut the number of Covid-19 cases and deaths in the US and globally since the pandemic started. My goal was to use the different data sets together and to analyze them to draw useful conclusions about the pandemic and how the virus affected people.
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
+I started by reading the 4 data sets and assigning them each to a different variable.
+```{r cases, message=FALSE}
+library(tidyverse)
 url_in <-"https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/"
 file_names<-
   c("time_series_covid19_confirmed_global.csv",
@@ -25,11 +25,14 @@ file_names<-
     "time_series_covid19_confirmed_US.csv",
     "time_series_covid19_deaths_US.csv")
 urls <- str_c(url_in, file_names)
-urls
 global_cases<-read_csv(urls[1])
 global_deaths<-read_csv(urls[2])
 US_cases<-read_csv(urls[3])
 US_deaths <-read_csv(urls[4])
+```
+
+I cleaned and transformed the global data and the US cases data by putting all the dates into rows and reducing the amount or columns. I also removed data I wouldn't use like latitude and longitude and renamed some columns.
+```{r global, message=FALSE}
 global_cases <- global_cases %>%
   pivot_longer(cols = -c(`Province/State`, `Country/Region`, Lat, Long), names_to = "date", values_to = "cases") %>%
   select(-c(Lat, Long))
@@ -48,7 +51,12 @@ US_cases <- US_cases %>%
   select(Admin2:cases) %>%
   mutate(date = mdy(date)) %>%
   select(-c(Lat, Long_))
+```
 
+## US vs Global Comparison Visualization
+
+I grouped the data for the US cases and the global cases by date and graphed them. I assigned them different colors to compare the changes in the number of cases over time.
+```{r compare}
 US_by_date <- US_cases %>% 
   group_by(date) %>%
   summarize(cases = sum(cases)) %>%
@@ -60,24 +68,44 @@ Global_by_date <- global %>%
   select(date, cases, deaths)
 ggplot()+
   geom_line(aes(x=US_by_date$date, y=US_by_date$cases, color="US Cases")) +
-  geom_line(aes(x=Global_by_date$date, y=Global_by_date$cases, color = "Global Cases"))
+  geom_line(aes(x=Global_by_date$date, y=Global_by_date$cases, color = "Global Cases"))+
+  labs(title="Covid-19 Cases: Global vs. US", x="Date", y = " Number of cases.")
+```
+The graph shows that both the US and global cases were increasing steadily until the start of 2022 when they both had a steep increase in cases. However, the global cases continued to increase steeply while the US cases started to level out to the same rate of increase from before the steep increase. It would be interesting to obtain and compare data about the accessibility to the vaccine in the US and globally.
+
+## Survival Rate Visualization
+
+I plotted the the survival rate of the global rates over time. I subtracted the number of deaths from the number of cases to find the number of survivors and divided that by the number of cases on that day.
+```{r cases vs deaths}
 Global_by_date %>%
   ggplot()+
-  geom_line(aes(x=date, y=(cases-deaths)/cases)) 
+  geom_line(aes(x=date, y=(cases-deaths)/cases)) +
+  labs(title= "Covid-19 Global Cases Survival Rate", x = "Date", y = "Survival Rate")
+```
+The graph shows that over time the survival rate has been over 97% majority of the time. It increased to 98% early in the pandemic but had a large dip a third of the way into 2020 and reached a low just above 92%. It then increased and was leveled out at 98% by the start of 2021. Since then it has steadily increased to 99%. 
+
+## Global Cases Prediction Model
+
+I created a linear model to predict the number of global cases from the number of US cases. 
+```{r mod}
 mod <- lm(Global_by_date$cases ~ US_by_date$cases, data = c(Global_by_date, US_by_date))
+summary(mod)
+```
+The linear model is `Global Cases = 6429e+00(US Cases) - 3.012e+07` and it has a r-squared of .9864 meaning its r is .993177. That is a very strong association between the US cases and the global cases. 
+
+I compared the predictions from the model with the actual data points. I plotted the predictions in red and the actual points in blue. 
+```{r prediction}
 Global_pred <- Global_by_date %>% mutate(pred = predict(mod))
 ggplot()+
   geom_point(aes(x= US_by_date$cases, y=Global_by_date$cases), color = "blue") +
-  geom_point(aes(x=US_by_date$cases, y = Global_pred$pred), color= "red")
+  geom_point(aes(x=US_by_date$cases, y = Global_pred$pred), color= "red") 
 
 ```
+The plot shows that the actual date isn't perfectly linear since it has some dips but it is very strong. This indicates the linear model could be a strong predictor for the number of global cases.
 
-## Including Plots
 
-You can also embed plots, for example:
+## Conclusion and Bias
 
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
+The data from this project demonstrated how the global COVID-19 cases have increased at a steeper rate since 2022 while the US cases have increased steadily since the start of the pandemic. In regards to the survival rate of the virus it decreased from 98% to nearly 92% in 2020, but since then has increased to 99%. The number of global cases can be predicted by a linear model using the number of US cases and they have a very strong association.
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+The personal bias that could have had an impact on this analysis is that I remember the reports released during the pandemic as well as all the negative news. I mitigated this bias by not drawing conclusions before analyzing the data. I also did visualizations and models that I had not seen before and therefore did not have a guess as to what they would look like.
